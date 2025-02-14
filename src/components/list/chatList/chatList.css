@@ -140,6 +140,15 @@
     transition: all ease 0.3s;
 }
 
+/* Active Navigation Item */
+.nav-item.active {
+    color: rgba(17, 25, 40, 0.5); /* Change color for active item */
+  }
+  
+  .nav-item.active i {
+    color: rgba(17, 25, 40, 0.5); /* Change icon color for active item */
+  }
+
 .nav-item span {
     font-size: 14px;
     color: #ccc;
@@ -147,8 +156,7 @@
     
 }
 
-.nav-item:hover,
-.nav-item span:hover {
+.nav-item:hover {
     color: rgba(17, 25, 40, 0.5);
     /* Highlight on hover */
 }
