@@ -118,7 +118,7 @@
 
         .name {
             margin-top: 10px;
-            font-size: 16px;
+            font-size: 15px;
             font-weight: bold;
             color: #ffffff;
             /* Adjust color as needed */
@@ -136,6 +136,7 @@
 
                 .texts {
                     p {
+                        font-size: 14px;
                         background-color: #5183fe;
                         color: #ffffff;
                     }
@@ -163,6 +164,7 @@
                 }
 
                 p {
+                    font-size: 14px;
                     padding: 20px;
                     background-color: rgba(17, 25, 40, 0.3);
                     border-radius: 10px;
@@ -206,9 +208,9 @@
             border: none;
             outline: none;
             color: #ffffff;
-            padding: 20px;
+            padding: 18px;
             border-radius: 10px;
-            font-size: 16px;
+            font-size: 14px;
         }
 
         .emoji {
@@ -248,3 +250,5 @@
     }
 
 }
+
+/* 50:40 */
