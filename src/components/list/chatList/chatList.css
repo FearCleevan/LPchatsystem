@@ -85,6 +85,7 @@
             height: 40px;
             border-radius: 50%;
             object-fit: cover;
+            border: 1px solid #ccc;
         }
 
         .texts {
@@ -134,6 +135,7 @@
     color: white;
     font-size: 16px;
     cursor: pointer;
+    position: relative; /* Add this for positioning the notification badge */
 }
 
 .nav-item span {
@@ -149,20 +151,42 @@
 /* Active Navigation Item */
 .nav-item.active {
     color: rgba(17, 25, 40, 0.5); /* Change color for active item */
-  }
-  
-  .nav-item.active i {
+}
+
+.nav-item.active i {
     color: rgba(17, 25, 40, 0.5); /* Change icon color for active item */
-  }
+}
 
 .nav-item span {
     font-size: 14px;
     color: #ccc;
     transition: all ease 0.3s;
-    
 }
 
 .nav-item:hover {
     color: rgba(17, 25, 40, 0.5);
     /* Highlight on hover */
+}
+
+/* Notification Badge Styles */
+.notification-badge {
+    position: absolute;
+    top: -5px; /* Adjust position to align with the icon */
+    right: 10px; /* Adjust position to align with the icon */
+    background-color: red; /* Red background for the badge */
+    color: white; /* White text color */
+    border-radius: 50%; /* Circular shape */
+    font-size: 12px; /* Font size for the number */
+    width: 18px; /* Fixed width */
+    height: 18px; /* Fixed height */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold; /* Bold text */
+    z-index: 1; /* Ensure the badge is above other elements */
+}
+
+/* Hover effect for the notification badge */
+.nav-item:hover .notification-badge {
+    background-color: darkred; /* Darker red on hover */
 }
