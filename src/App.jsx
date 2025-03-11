@@ -13,6 +13,7 @@ import { useUserStore } from "./lib/userStore";
 import { useChatStore } from "./lib/chatStore";
 import ProtectedRoute from "./components/ProtectedRoute";
 import WelcomePage from "./components/welcome/WelcomePage";
+import ChatRoom from "./components/chatroom/ChatRoom"; // Import the ChatRoom component
 
 // Define ChatListPage as a component that receives chatId as a prop
 const ChatListPage = ({ chatId }) => (
@@ -64,6 +65,15 @@ const App = () => {
             element={
               <ProtectedRoute allowedRoles={["admin"]}>
                 <DashboardListPage />
+              </ProtectedRoute>
+            }
+          />
+          {/* Add a route for the ChatRoom component */}
+          <Route
+            path="/chat-room"
+            element={
+              <ProtectedRoute allowedRoles={["admin"]}>
+                <ChatRoom />
               </ProtectedRoute>
             }
           />

@@ -97,7 +97,6 @@ const AdminDashboard = () => {
         uploadPreset: "lp_upload_preset",
         sources: ["local", "url"],
         multiple: false,
-        cropping: true,
       },
       (error, result) => {
         if (!error && result && result.event === "success") {
@@ -239,11 +238,13 @@ const AdminDashboard = () => {
             </li>
             <li className="links">
               <Link to="/chat-list">
-                <FaUsers /> Chat List
+                <FaComments /> Chat List
               </Link>
             </li>
             <li>
-              <FaComments /> Chat Room
+              <Link to="/chat-room">
+                <FaUsers /> Chat Room
+              </Link>
             </li>
             <li>
               <FaCog /> Account Settings

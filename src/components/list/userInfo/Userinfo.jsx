@@ -3,25 +3,36 @@ import "./userInfo.css";
 import { useUserStore } from "../../../lib/userStore";
 import { useNavigate } from "react-router-dom";
 import EmojiPicker from "emoji-picker-react";
+import {
+  getAuth,
+  reauthenticateWithCredential,
+  EmailAuthProvider,
+  updatePassword,
+} from "firebase/auth";
+import { doc, updateDoc } from "firebase/firestore"; // If using Firestore
+import { db } from "../../../lib/firebase"; // Import your Firestore instance
+import { ToastContainer, toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 const Userinfo = () => {
-  const { currentUser, logout } = useUserStore();
+  const { currentUser, logout, setCurrentUser, clearUser } = useUserStore(); // Destructure clearUser
   const navigate = useNavigate();
+  const [userRole, setUserRole] = useState(null); // Define setUserRole
 
-  const [showNewPassword, setShowNewPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [status, setStatus] = useState(currentUser?.status || "");
+  const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isAccountSettingsModalOpen, setIsAccountSettingsModalOpen] =
+    useState(false);
   const [isChangePasswordFormOpen, setIsChangePasswordFormOpen] =
     useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [status, setStatus] = useState("");
-  const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isAccountSettingsModalOpen, setIsAccountSettingsModalOpen] =
-    useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
 
   const suggestedStatuses = [
     { text: "🍔 Out for lunch" },
@@ -35,9 +46,26 @@ const Userinfo = () => {
     { text: "🏠 Working from home" },
   ];
 
-  const handleStatusSelect = (newStatus) => {
+  const handleStatusSelect = async (newStatus) => {
     setStatus(newStatus);
     setIsModalOpen(false);
+
+    // Save status to Firestore
+    try {
+      if (!currentUser || !currentUser.uid) {
+        toast.error("User not authenticated.");
+        return;
+      }
+
+      await updateDoc(doc(db, "users", currentUser.uid), {
+        status: newStatus,
+      });
+
+      toast.success("Status updated successfully!");
+    } catch (error) {
+      console.error("Error updating status:", error);
+      toast.error("Failed to update status.");
+    }
   };
 
   const handleEmojiSelect = (emojiObject) => {
@@ -45,9 +73,123 @@ const Userinfo = () => {
     setIsEmojiPickerOpen(false);
   };
 
-  const handleSignOut = () => {
-    logout();
-    navigate("/");
+  const handleSignOut = async () => {
+    const auth = getAuth(); // Initialize auth
+    try {
+      await auth.signOut(); // Sign out the user
+      setUserRole(null); // Clear user role (if applicable)
+      localStorage.removeItem("userRole"); // Remove user role from localStorage
+      clearUser(); // Clear user data from the store
+      navigate("/"); // Redirect to the home page
+    } catch (err) {
+      console.error("Logout failed:", err);
+    }
+  };
+
+  const handlePasswordChange = async () => {
+    const auth = getAuth();
+    const user = auth.currentUser;
+
+    if (!user || !currentPassword || !newPassword || !confirmPassword) {
+      toast.error("Please fill in all fields.");
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      toast.error("New password and confirm password do not match.");
+      return;
+    }
+
+    // Validate new password strength
+    if (newPassword.length < 8) {
+      toast.error("Password must be at least 8 characters long.");
+      return;
+    }
+
+    setIsUpdatingPassword(true);
+
+    try {
+      // Reauthenticate the user
+      const credential = EmailAuthProvider.credential(
+        user.email,
+        currentPassword
+      );
+      await reauthenticateWithCredential(user, credential);
+
+      // Update the password
+      await updatePassword(user, newPassword);
+
+      toast.success("Password updated successfully!");
+      setIsChangePasswordFormOpen(false);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (error) {
+      console.error("Error updating password:", error);
+      toast.error(
+        "Failed to update password. Please check your current password."
+      );
+    } finally {
+      setIsUpdatingPassword(false);
+    }
+  };
+
+  const handleChangePhoto = () => {
+    const auth = getAuth();
+    const user = auth.currentUser;
+
+    if (!user) {
+      toast.error("User not authenticated. Please sign in.");
+      return;
+    }
+
+    if (!window.cloudinary) {
+      toast.error("Cloudinary widget not loaded.");
+      return;
+    }
+
+    const cloudinaryWidget = window.cloudinary.createUploadWidget(
+      {
+        cloudName: "dtebf3uea", // Replace with your Cloudinary cloud name
+        uploadPreset: "lp_upload_preset", // Replace with your upload preset
+        sources: ["local", "url"],
+        multiple: false,
+      },
+      (error, result) => {
+        if (!error && result && result.event === "success") {
+          const imageUrl = result.info.secure_url;
+          updateProfilePhoto(imageUrl); // Update Firestore with the new photo URL
+        }
+      }
+    );
+
+    cloudinaryWidget.open();
+  };
+
+  const updateProfilePhoto = async (imageUrl) => {
+    const auth = getAuth();
+    const user = auth.currentUser;
+
+    if (!user || !user.uid) {
+      toast.error("User not authenticated.");
+      return;
+    }
+
+    try {
+      // Update the user's document in Firestore
+      await updateDoc(doc(db, "users", user.uid), {
+        avatar: imageUrl,
+      });
+
+      // Update the currentUser state in useUserStore
+      const updatedUser = { ...currentUser, avatar: imageUrl };
+      setCurrentUser(updatedUser); // Use setCurrentUser here
+
+      toast.success("Profile photo updated successfully!");
+    } catch (error) {
+      console.error("Error updating profile photo:", error);
+      toast.error("Failed to update profile photo.");
+    }
   };
 
   if (!currentUser) {
@@ -258,12 +400,10 @@ const Userinfo = () => {
                       </div>
                       <button
                         className="submit-btn"
-                        onClick={() => {
-                          console.log("Password change submitted");
-                          setIsChangePasswordFormOpen(false);
-                        }}
+                        onClick={handlePasswordChange}
+                        disabled={isUpdatingPassword}
                       >
-                        Submit
+                        {isUpdatingPassword ? "Updating..." : "Submit"}
                       </button>
                       <button
                         className="cancel-btn"
@@ -293,9 +433,7 @@ const Userinfo = () => {
                   />
                   <button
                     className="change-photo-btn"
-                    onClick={() => {
-                      console.log("Change Photo clicked");
-                    }}
+                    onClick={handleChangePhoto}
                   >
                     Change Photo
                   </button>
@@ -320,6 +458,19 @@ const Userinfo = () => {
           </div>
         </div>
       )}
+
+      {/* Toastify Container */}
+      <ToastContainer
+        position="bottom-right"
+        autoClose={3000}
+        hideProgressBar={false}
+        newestOnTop={false}
+        closeOnClick
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+      />
     </div>
   );
 };

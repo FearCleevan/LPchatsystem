@@ -310,6 +310,7 @@
         border-radius: 5px;
         border: 1px solid #555;
         background: #333;
+        outline: none;
         color: white;
         font-size: 14px;
     }

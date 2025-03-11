@@ -3,12 +3,13 @@ import "./chatList.css";
 import "@fortawesome/fontawesome-free/css/all.min.css";
 import AddUser from "./addUser/AddUser";
 import { useUserStore } from "../../../lib/userStore";
-import { doc, getDoc, onSnapshot, updateDoc } from "firebase/firestore";
+import { doc, getDoc, onSnapshot, updateDoc, collection, getDocs } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 import { useChatStore } from "../../../lib/chatStore";
 
 // Utility function to truncate text
 const truncateText = (text, maxLength) => {
+  if (!text) return ""; // Handle undefined or null values
   if (text.length > maxLength) {
     return text.slice(0, maxLength) + "...";
   }
@@ -17,22 +18,21 @@ const truncateText = (text, maxLength) => {
 
 const ChatList = () => {
   const [addMode, setAddMode] = useState(false);
+  const [input, setInput] = useState("");
   const [chats, setChats] = useState([]);
   const [activeSection, setActiveSection] = useState("chats");
 
   const { currentUser } = useUserStore();
-  const { chatId, changeChat } = useChatStore();
+  const { changeChat } = useChatStore();
 
   // Calculate the number of unread messages
   const unreadNotifications = chats.filter((chat) => !chat.isSeen).length;
 
   useEffect(() => {
-    // Check if currentUser is null
-    if (!currentUser) {
-      return; // Exit early if currentUser is null
-    }
+    if (!currentUser) return;
 
-    const unSub = onSnapshot(
+    // Fetch individual chats
+    const unSubIndividual = onSnapshot(
       doc(db, "userchats", currentUser.id),
       async (res) => {
         if (!res.exists()) {
@@ -48,21 +48,37 @@ const ChatList = () => {
 
           if (!userDocSnap.exists()) {
             console.log("User document not found for receiverId:", item.receiverId);
-            return null; // Skip this item if the user document doesn't exist
+            return null;
           }
 
           const user = userDocSnap.data();
-          return { ...item, user };
+          return { ...item, user, type: "individual" }; // Add type to distinguish between individual and group chats
         });
 
-        const chatData = (await Promise.all(promises)).filter(Boolean); // Filter out null values
+        const individualChats = (await Promise.all(promises)).filter(Boolean);
 
-        setChats(chatData.sort((a, b) => b.updatedAt - a.updatedAt));
+        // Fetch group chats
+        const groupChatsCollection = collection(db, "groupChats");
+        const groupChatsSnapshot = await getDocs(groupChatsCollection);
+        const groupChats = groupChatsSnapshot.docs
+          .filter((doc) => doc.data().members.includes(currentUser.id)) // Filter group chats where the current user is a member
+          .map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+            type: "group", // Add type to distinguish between individual and group chats
+          }));
+
+        // Combine individual and group chats
+        const allChats = [...individualChats, ...groupChats].sort(
+          (a, b) => b.updatedAt - a.updatedAt
+        );
+
+        setChats(allChats);
       }
     );
 
     return () => {
-      unSub();
+      unSubIndividual();
     };
   }, [currentUser]);
 
@@ -71,45 +87,66 @@ const ChatList = () => {
   };
 
   const handleSelect = async (chat) => {
-    if (!chat.user) {
-      console.error("User data is missing for chat:", chat);
-      return;
-    }
-
-    const userChats = chats.map((item) => {
-      const { user, ...rest } = item;
-      return rest;
-    });
-
-    const chatIndex = userChats.findIndex(
-      (item) => item.chatId === chat.chatId
-    );
-
-    if (chatIndex === -1) {
-      console.error("Chat not found in userChats:", chat.chatId);
-      return;
-    }
-
-    userChats[chatIndex].isSeen = true;
-
-    const userChatsRef = doc(db, "userchats", currentUser.id);
-
-    try {
-      await updateDoc(userChatsRef, {
-        chats: userChats,
-      });
-      changeChat(chat.chatId, chat.user);
-    } catch (err) {
-      console.log(err);
+    if (chat.type === "individual") {
+      // Handle individual chat selection
+      if (!chat.user) {
+        console.error("User data is missing for chat:", chat);
+        return;
+      }
+  
+      const userChats = chats
+        .filter((item) => item.type === "individual")
+        .map((item) => {
+          const { user, ...rest } = item;
+          return rest;
+        });
+  
+      const chatIndex = userChats.findIndex(
+        (item) => item.chatId === chat.chatId
+      );
+  
+      if (chatIndex === -1) {
+        console.error("Chat not found in userChats:", chat.chatId);
+        return;
+      }
+  
+      userChats[chatIndex].isSeen = true;
+  
+      const userChatsRef = doc(db, "userchats", currentUser.id);
+  
+      try {
+        await updateDoc(userChatsRef, {
+          chats: userChats,
+        });
+        changeChat(chat.chatId, chat.user, "individual"); // Set chatType to "individual"
+      } catch (err) {
+        console.log(err);
+      }
+    } else if (chat.type === "group") {
+      // Handle group chat selection
+      changeChat(chat.id, null, "group"); // Pass group chat ID and name, and set chatType to "group"
     }
   };
+
+  const filteredChats = chats.filter((c) => {
+    if (c.type === "individual") {
+      return c.user?.fullname?.toLowerCase().includes(input.toLowerCase());
+    } else if (c.type === "group") {
+      return c.name?.toLowerCase().includes(input.toLowerCase());
+    }
+    return false; // Exclude chats with unknown types
+  });
 
   return (
     <div className="chatList">
       <div className="search">
         <div className="searchBar">
           <img src="./search.png" alt="" />
-          <input type="text" placeholder="Search" />
+          <input
+            type="text"
+            placeholder="Search"
+            onChange={(e) => setInput(e.target.value)}
+          />
         </div>
         <img
           src={addMode ? "./minus.png" : "./plus.png"}
@@ -130,7 +167,6 @@ const ChatList = () => {
             >
               <i className="fa-solid fa-message"></i>
               <span>Chats</span>
-              {/* Notification Badge */}
               {unreadNotifications > 0 && (
                 <span className="notification-badge">
                   {unreadNotifications}
@@ -174,22 +210,31 @@ const ChatList = () => {
       {/* Conditional Rendering Based on Active Section */}
       {activeSection === "chats" && (
         <div className="section">
-          {chats.map((chat) => (
+          {filteredChats.map((chat) => (
             <div
               className="item"
-              key={chat.chatId}
+              key={chat.chatId || chat.id} // Use chat.id for group chats
               onClick={() => handleSelect(chat)}
               style={{
                 backgroundColor: chat?.isSeen ? "transparent" : "#5183fe",
               }}
             >
               <img
-                src={chat.user?.avatar || "./avatar.png"} // Fallback to default avatar if user.avatar is missing
+                src={
+                  chat.type === "individual"
+                    ? chat.user?.avatar || "./avatar.png" // Individual chat avatar
+                    : chat.avatar || "./group-avatar.png" // Group chat avatar (use the uploaded avatar or a default one)
+                }
                 alt=""
               />
               <div className="texts">
-                <span>{chat.user?.fullname || "Unknown User"}</span> {/* Fallback to "Unknown User" if fullname is missing */}
-                <p>{truncateText(chat.lastMessage, 15)}</p> {/* Truncate lastMessage */}
+                <span>
+                  {chat.type === "individual"
+                    ? chat.user?.fullname || "Unknown User" // Individual chat name
+                    : chat.name // Group chat name
+                  }
+                </span>
+                <p>{truncateText(chat.lastMessage, 15)}</p>
               </div>
             </div>
           ))}

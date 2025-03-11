@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import "./chat.css";
+import "./chat.css"; // Reuse the same CSS as Chat.jsx
 import EmojiPicker from "emoji-picker-react";
 import {
   arrayUnion,
@@ -12,7 +12,7 @@ import { db } from "../../lib/firebase";
 import { useChatStore } from "../../lib/chatStore";
 import { useUserStore } from "../../lib/userStore";
 
-const Chat = () => {
+const GroupChat = () => {
   const [chat, setChat] = useState(false);
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
@@ -22,23 +22,15 @@ const Chat = () => {
   const [showPreviewModal, setShowPreviewModal] = useState(false);
 
   const { currentUser } = useUserStore();
-  const { chatId, user, chatType } = useChatStore(); // Add chatType
+  const { chatId, user } = useChatStore(); // `user` here represents the group chat
 
   const endRef = useRef(null);
   const inputRef = useRef(null);
 
   const normalizedMessages = chat?.messages?.map((message) => ({
     ...message,
-    img: Array.isArray(message.img)
-      ? message.img
-      : message.img
-      ? [message.img]
-      : [],
-    docs: Array.isArray(message.docs)
-      ? message.docs
-      : message.docs
-      ? [message.docs]
-      : [],
+    img: Array.isArray(message.img) ? message.img : message.img ? [message.img] : [],
+    docs: Array.isArray(message.docs) ? message.docs : message.docs ? [message.docs] : [],
   }));
 
   const allImages = normalizedMessages
@@ -52,25 +44,21 @@ const Chat = () => {
   useEffect(() => {
     if (!chatId) return;
 
-    // Determine the Firestore collection based on chatType
-    const collectionName = chatType === "group" ? "groupChats" : "chats";
-
-    const unSub = onSnapshot(doc(db, collectionName, chatId), (res) => {
+    const unSub = onSnapshot(doc(db, "groupChats", chatId), (res) => {
       if (res.exists()) {
         const messages = res.data().messages;
 
-        // Update the status to "seen" for the last message if the recipient is viewing the chat
+        // Update the status to "seen" for the last message if the sender is viewing the chat
         const lastMessage = messages[messages.length - 1];
         if (
           lastMessage?.senderId === currentUser.id && // Last message is from the current user
-          lastMessage.status === "delivered" && // Status is still "delivered"
-          (chatType === "individual" ? user?.id === currentUser.id : true) // For group chats, skip user check
+          lastMessage.status === "delivered" // Status is still "delivered"
         ) {
           const updatedMessages = messages.map((msg, index) =>
             index === messages.length - 1 ? { ...msg, status: "seen" } : msg
           );
 
-          updateDoc(doc(db, collectionName, chatId), {
+          updateDoc(doc(db, "groupChats", chatId), {
             messages: updatedMessages,
           });
         }
@@ -84,7 +72,7 @@ const Chat = () => {
     return () => {
       unSub();
     };
-  }, [chatId, currentUser?.id, user?.id, chatType]);
+  }, [chatId, currentUser?.id]);
 
   const handleEmoji = (e) => {
     setText((prev) => prev + e.emoji);
@@ -130,7 +118,7 @@ const Chat = () => {
   };
 
   const handleSend = async () => {
-    if (!currentUser) {
+    if (!currentUser || !user) {
       console.error("User is not logged in.");
       return;
     }
@@ -142,52 +130,18 @@ const Chat = () => {
     const newMessage = {
       senderId: currentUser.id,
       text: text || "",
-      img: uploads
-        .filter((upload) => upload?.type === "image")
-        .map((upload) => upload.url),
-      docs: uploads
-        .filter((upload) => upload?.type === "file")
-        .map((upload) => ({
-          url: upload.url,
-          name: upload.name,
-        })),
+      img: uploads.filter((upload) => upload?.type === "image").map((upload) => upload.url),
+      docs: uploads.filter((upload) => upload?.type === "file").map((upload) => ({
+        url: upload.url,
+        name: upload.name,
+      })),
       createdAt: new Date(),
       status: "delivered",
     };
 
-    // Determine the Firestore collection based on chatType
-    const collectionName = chatType === "group" ? "groupChats" : "chats";
-
-    await updateDoc(doc(db, collectionName, chatId), {
+    await updateDoc(doc(db, "groupChats", chatId), {
       messages: arrayUnion(newMessage),
     });
-
-    // Update last message in userchats (for individual chats only)
-    if (chatType === "individual") {
-      const userIDs = [currentUser.id, user.id];
-
-      userIDs.forEach(async (id) => {
-        const userChatsRef = doc(db, "userchats", id);
-        const userChatsSnapshot = await getDoc(userChatsRef);
-
-        if (userChatsSnapshot.exists()) {
-          const userChatsData = userChatsSnapshot.data();
-
-          const chatIndex = userChatsData.chats.findIndex(
-            (c) => c.chatId === chatId
-          );
-
-          userChatsData.chats[chatIndex].lastMessage = text || "📷 Image";
-          userChatsData.chats[chatIndex].isSeen =
-            id === currentUser.id ? true : false;
-          userChatsData.chats[chatIndex].updatedAt = Date.now();
-
-          await updateDoc(userChatsRef, {
-            chats: userChatsData.chats,
-          });
-        }
-      });
-    }
 
     setText("");
     setFiles([]);
@@ -243,7 +197,7 @@ const Chat = () => {
     }
   };
 
-  if (!currentUser) {
+  if (!currentUser || !user) {
     return <div>Loading...</div>;
   }
 
@@ -251,25 +205,10 @@ const Chat = () => {
     <div className="chat">
       <div className="top">
         <div className="user">
-          <img
-            src={
-              chatType === "group"
-                ? chat?.avatar || "./group-avatar.png" // Use group avatar
-                : user?.avatar || "./avatar.png" // Use user avatar
-            }
-            alt={chatType === "group" ? "Group Avatar" : "User Avatar"}
-          />
+        <img src={user?.avatar || "./avatar.png"} alt="User Avatar" />
           <div className="user-info">
-            <h2 className="userName">
-              {chatType === "group"
-                ? chat?.name
-                : user?.fullname || "Unknown User"}
-            </h2>
-            <p className="userTitle">
-              {chatType === "group"
-                ? "Group Chat"
-                : user?.position || "Unknown Role"}
-            </p>
+            <h2 className="userName">{user?.name || "Group Chat"}</h2>
+            <p className="userTitle">Group</p>
             <p className="userStatus">Active Now</p>
           </div>
         </div>
@@ -291,19 +230,11 @@ const Chat = () => {
             {message.senderId !== currentUser.id && (
               <div className="message-user-info">
                 <img
-                  src={
-                    chatType === "group"
-                      ? "./group-avatar.png" // Use group avatar for group chats
-                      : user?.avatar || "./avatar.png" // Use user avatar for individual chats
-                  }
+                  src={user?.avatar || "./avatar.png"}
                   alt="User Avatar"
                   className="message-avatar"
                 />
-                <span className="message-username">
-                  {chatType === "group"
-                    ? "Group Member"
-                    : user?.fullname || "Unknown User"}
-                </span>
+                <span className="message-username">{message.senderName || "Unknown User"}</span>
               </div>
             )}
             <div className="texts">
@@ -331,12 +262,11 @@ const Chat = () => {
               <span>
                 {new Date(message.createdAt?.toDate()).toLocaleTimeString()}
               </span>
-              {index === normalizedMessages.length - 1 &&
-                message.senderId === currentUser.id && (
-                  <span className="message-status">
-                    {message.status === "delivered" ? "Delivered" : "Seen"}
-                  </span>
-                )}
+              {index === normalizedMessages.length - 1 && message.senderId === currentUser.id && (
+                <span className="message-status">
+                  {message.status === "delivered" ? "Delivered" : "Seen"}
+                </span>
+              )}
             </div>
           </div>
         ))}
@@ -393,15 +323,9 @@ const Chat = () => {
       </div>
 
       {showPreviewModal && (
-        <div
-          className="preview-modal"
-          onClick={() => setShowPreviewModal(false)}
-        >
+        <div className="preview-modal" onClick={() => setShowPreviewModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <button
-              className="close-modal"
-              onClick={() => setShowPreviewModal(false)}
-            >
+            <button className="close-modal" onClick={() => setShowPreviewModal(false)}>
               ✖
             </button>
             <div className="image-container">
@@ -436,4 +360,4 @@ const Chat = () => {
   );
 };
 
-export default Chat;
+export default GroupChat;

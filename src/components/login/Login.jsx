@@ -6,6 +6,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { FaEye, FaEyeSlash } from "react-icons/fa";
 import "./login.css";
 import { useUserRole } from "../../context/UserRoleContext";
+import { useUserStore } from "../../lib/userStore"; // Import useUserStore
 
 const Login = () => {
   const navigate = useNavigate();
@@ -13,12 +14,13 @@ const Login = () => {
   const [rememberMe, setRememberMe] = useState(false);
   const { setUserRole } = useUserRole();
   const [loading, setLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState(""); // State for error message
+  const [errorMessage, setErrorMessage] = useState("");
+  const { fetchUserInfo } = useUserStore(); // Use fetchUserInfo from useUserStore
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setErrorMessage(""); // Reset error message before attempting login
+    setErrorMessage("");
 
     const formData = new FormData(e.target);
     const email = formData.get("email");
@@ -34,6 +36,9 @@ const Login = () => {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
 
+      // Fetch user info and set it in useUserStore
+      await fetchUserInfo(user.uid);
+
       const userDoc = await getDoc(doc(db, "users", user.uid));
       if (!userDoc.exists()) {
         setErrorMessage("User data not found.");
@@ -42,7 +47,7 @@ const Login = () => {
       }
 
       const userData = userDoc.data();
-      const userRole = userData.position; // Assuming the role is stored in the "position" field
+      const userRole = userData.position;
 
       setUserRole(userRole);
       localStorage.setItem("userRole", userRole);
@@ -67,7 +72,6 @@ const Login = () => {
       <div className="login-item">
         <img src="./LP LOgo.png" alt="Logo" />
 
-        {/* Display error message here if credentials are wrong */}
         {errorMessage && <div className="error-message">{errorMessage}</div>}
 
         <form className="login-form" onSubmit={handleLogin}>
